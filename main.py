@@ -49,37 +49,49 @@ def expected_results(test_paths, train_paths):
     return exp
 
 
-def se(expect, actual):
+def deviation_over_expected(expect, actual):
+    """Compute the difference between expected and actual squared error against
+    the test set, per image.
+    """
     err = {}
     for q in expect:
+        q_x, q_y, _ = loc_from_filename(q)
         e_x, e_y, _ = loc_from_filename(expect[q])
         a_x, a_y, _ = loc_from_filename(actual[q])
-        err[q] = (e_x - a_x)**2 + (e_y - a_y)**2
+        err[q] = (q_x - a_x)**2 + (q_y - a_y)**2 - (q_x - e_x)**2 - (q_y - e_y)**2
     return err
 
 
 def mse(expect, actual):
-    return float(sum(se(expect, actual).values())) / len(expect)
+    """Return the mean across the deviation over expected for provided set of
+    results.
+    """
+    return float(sum(deviation_over_expected(expect, actual).values())) / len(expect)
 
 
-def barchart_dict(d, title=""):
+def barchart_dict(d, title="", to_sort=False, key_labels=False):
+    """Show a bar chart using given dictionary key, values as x-y axis. If
+    to_sort, then sort keys by ascending value. If key_labels, then label the
+    x-axis using key strings.
+    """
     x = d.keys()
+    if to_sort:
+        x = sorted(x, key=lambda k: d[k])
     y = [d[k] for k in x]
     x_pos = np.arange(len(x))
-    plt.bar(x_pos, y, align='center')
-    #plt.xticks(x_pos, x)
+    plt.bar(x_pos, y, align='center', color='#66c2a5', alpha=0.6)
+    if key_labels:
+        plt.xticks(x_pos, x)
     plt.title(title)
     plt.show()
 
 
 def barchart_class_dict(d, title=""):
-    x = d.keys()
-    y = [d[k] for k in x]
-    x_pos = np.arange(len(x))
-    plt.bar(x_pos, y, align='center')
-    plt.xticks(x_pos, [type(k).__name__ for k in x])
-    plt.title(title)
-    plt.show()
+    """Show a bar chart using given dictionary as keys as above but display key
+    labels with their type name instead.
+    """
+    barchart_dict({type(k).__name__: v for k, v in d.iteritems()}, title,
+            key_labels=True)
 
 
 if __name__ == '__main__':
@@ -107,6 +119,7 @@ if __name__ == '__main__':
         all_results[m] = {}
         with timer("{} queries with {} took %.3f seconds.".format(len(queries), type(m).__name__)):
             for q_path in queries:
+                # matches is list of tuples (path, score)
                 matches = m.match_test_image(q_path)
                 top = matches[0] if len(matches) else None
                 all_results[m][q_path] = top[0]
@@ -119,6 +132,10 @@ if __name__ == '__main__':
                 print "{} expected match to {}".format(q_path, exp[q_path])
                 if args.debug:
                     m.debug_display(q_path, matches)
+                    if args.charts:
+                        loc_dict = { loc_from_filename(t[0]): t[1] for t in matches }
+                        loc_dict = { "{}, {}:{}".format(*k): v for k,v in loc_dict.iteritems() }
+                        barchart_dict(loc_dict, title="Ranking matches to {}".format(q_path), to_sort=True, key_labels=True)
 
     # Now grade the results and show plots.
     accuracy = {m: sum(1.0/len(exp) for q in exp if exp[q] == all_results[m][q])
@@ -130,7 +147,7 @@ if __name__ == '__main__':
     print "Accuracy", accuracy
     print "Mean squared error", mses
     for m in all_results:
-        errs = se(exp, all_results[m])
+        errs = deviation_over_expected(exp, all_results[m])
         if args.charts:
             barchart_dict(errs, title="{} per file result".format(type(m).__name__))
         print "{} per-file squared errors:".format(type(m).__name__)
