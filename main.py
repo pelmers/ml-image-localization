@@ -1,4 +1,3 @@
-from argparse import ArgumentParser
 from contextlib import contextmanager
 from glob import glob
 from os.path import basename, join, splitext
@@ -7,18 +6,7 @@ from time import time
 
 import numpy as np
 import matplotlib.pyplot as plt
-
-from BFORBmatcher import BFORBMatcher
-
-parser = ArgumentParser(description='Run some models.')
-parser.add_argument('--query', help='path to query image, default will benchmark on all sortedtesting images', default=None)
-parser.add_argument('--train_folder', help='folder holding all training images. default: sortedtraining', default='sortedtraining/')
-parser.add_argument('--matchers', help='select matchers to use, comma-separated (default: use all models)', default='')
-parser.add_argument('--detail', action='store_true', help='output additional detailed scoring breakdowns')
-parser.add_argument('--debug', action='store_true', help='have matcher output debug info after each match')
-parser.add_argument('--charts', action='store_true', help='should I show bar charts')
-
-all_matchers = [BFORBMatcher]
+import cv2
 
 
 @contextmanager
@@ -36,6 +24,41 @@ def loc_from_filename(path):
     root, _ = splitext(f)
     x, y, o = root.split('_')
     return float(x), float(y), o
+
+
+def test_visibility_constraint(l1, l2):
+    """Return whether l1 and l2 can NOT share keypoints.
+    """
+    x1, y1, o1 = l1
+    x2, y2, o2 = l2
+    ret = True
+    if o1 in {'N', 'NE', 'NW'}:
+        if y2 > y1:
+            ret = False
+        elif o2 in {'N', 'NE', 'NW'}:
+            ret = False
+    if o1 in {'E', 'NE', 'SE'}:
+        if y2 > y1:
+            ret = False
+        elif o2 in {'N', 'NE', 'NW'}:
+            ret = False
+    if o1 in {'S', 'SE', 'SW'}:
+        if y2 > y1:
+            ret = False
+        elif o2 in {'N', 'NE', 'NW'}:
+            ret = False
+    if o1 in {'W', 'SW', 'NW'}:
+        if y2 > y1:
+            ret = False
+        elif o2 in {'W', 'SW', 'NW'}:
+            ret = False
+    return ret
+
+
+def spatial_constraint_map(locations):
+    # Return map of location: [locations with which it could not share keypoints, not including self]
+    # Assumes camera field of view is no more than 135 degrees.
+    return {k1: filter(lambda k2: test_visibility_constraint(k1, k2), locations) for k1 in locations}
 
 
 def expected_results(test_paths, train_paths):
@@ -95,61 +118,14 @@ def barchart_class_dict(d, title=""):
 
 
 if __name__ == '__main__':
-    args = parser.parse_args()
-    # 1. Train model (s)
-    # 2a. Bench? Then try every test image.
-    # 2b. Otherwise use provided image to test
-    matchers_selected = args.matchers.split(',')
-    use_matchers = [m for m in all_matchers
-                    if type(m).__name__.lower().rstrip('matcher') in matchers_selected]
-    if not len(use_matchers):
-        use_matchers = all_matchers[:]
-
-    trained_matchers = []
-    train_paths = glob(join(args.train_folder, "*.JPG")) + glob(join(args.train_folder, "*.jpg"))
-    for Matcher in use_matchers:
-        m = Matcher()
-        with timer("Training {} took %.3f seconds.".format(type(m).__name__)):
-            m.train(train_paths)
-        trained_matchers.append(m)
-    queries = [args.query] if args.query else glob("sortedtesting/*.JPG")
-    all_results = {}
-    exp = expected_results(queries, train_paths)
-    for m in trained_matchers:
-        all_results[m] = {}
-        with timer("{} queries with {} took %.3f seconds.".format(len(queries), type(m).__name__)):
-            for q_path in queries:
-                # matches is list of tuples (path, score)
-                matches = m.match_test_image(q_path)
-                top = matches[0] if len(matches) else None
-                all_results[m][q_path] = top[0]
-                if args.detail:
-                    print q_path, matches
-                elif top:
-                    print "{} best matches {} with score {}".format(q_path, top[0], top[1])
-                else:
-                    print "{} no match found :(".format(q_path)
-                print "{} expected match to {}".format(q_path, exp[q_path])
-                if args.debug:
-                    m.debug_display(q_path, matches)
-                    if args.charts:
-                        loc_dict = { loc_from_filename(t[0]): t[1] for t in matches }
-                        loc_dict = { "{}, {}:{}".format(*k): v for k,v in loc_dict.iteritems() }
-                        barchart_dict(loc_dict, title="Ranking matches to {}".format(q_path), to_sort=True, key_labels=True)
-
-    # Now grade the results and show plots.
-    accuracy = {m: sum(1.0/len(exp) for q in exp if exp[q] == all_results[m][q])
-                for m in all_results}
-    mses = {m: mse(exp, all_results[m])}
-    if args.charts:
-        barchart_class_dict(accuracy, "Accuracy")
-        barchart_class_dict(mses, "Mean squared error")
-    print "Accuracy", accuracy
-    print "Mean squared error", mses
-    for m in all_results:
-        errs = deviation_over_expected(exp, all_results[m])
-        if args.charts:
-            barchart_dict(errs, title="{} per file result".format(type(m).__name__))
-        print "{} per-file squared errors:".format(type(m).__name__)
-        pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
+    train_folder = "sortedtraining"
+    train_paths = glob(join(train_folder, "*.JPG")) + glob(join(train_folder, "*.jpg"))
+    train_locs = map(loc_from_filename, train_paths)
+    pprint(spatial_constraint_map(train_locs))
+    # Find the features for every image.
+    # If some feature matches well against the constraint set then I would want to lower it (?).
+    brisk = cv2.BRISK()
+    img_brisks = {path : brisk.detectAndCompute(cv2.imread(path), None) for path in train_paths}
+    pprint(img_brisks[train_paths[1]])
+    print train_paths[1]
 
