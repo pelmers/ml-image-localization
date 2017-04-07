@@ -140,7 +140,7 @@ if __name__ == '__main__':
     # Now grade the results and show plots.
     accuracy = {m: sum(1.0/len(exp) for q in exp if exp[q] == all_results[m][q])
                 for m in all_results}
-    mses = {m: mse(exp, all_results[m])}
+    mses = {m: mse(exp, all_results[m]) for m in all_results}
     if args.charts:
         barchart_class_dict(accuracy, "Accuracy")
         barchart_class_dict(mses, "Mean squared error")
