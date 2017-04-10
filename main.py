@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from BFORBmatcher import BFORBMatcher
+from BFORBmatcher_fail import BFORBMatcher_fail
 from matcher import loc_from_filename
 
 parser = ArgumentParser(description='Run some models.')
@@ -18,12 +19,10 @@ parser.add_argument('--matchers', help='select matchers to use, comma-separated 
 parser.add_argument('--detail', action='store_true', help='output additional detailed scoring breakdowns')
 parser.add_argument('--debug', action='store_true', help='have matcher output debug info after each match')
 parser.add_argument('--charts', action='store_true', help='should I show bar charts')
-parser.add_argument('--threshold')
-parser.add_argument('--thresholdInterval')
-parser.add_argument('--numThresholds')
+parser.add_argument('--threshold', default=-1)
 
 
-all_matchers = [BFORBMatcher]
+all_matchers = [BFORBMatcher, BFORBMatcher_fail]
 
 
 @contextmanager
@@ -78,7 +77,6 @@ def barchart_dict(d, title="", to_sort=False, key_labels=False):
     if key_labels:
         plt.xticks(x_pos, x)
     plt.title(title)
-    plt.show()
 
 
 def barchart_class_dict(d, title=""):
@@ -136,6 +134,7 @@ if __name__ == '__main__':
     mses = {m: mse(exp, all_results[m]) for m in all_results}
     if args.charts:
         barchart_class_dict(accuracy, "Accuracy")
+        plt.figure()
         barchart_class_dict(mses, "Mean squared error")
     print "Accuracy", accuracy
     print "Mean squared error", mses
@@ -146,8 +145,10 @@ if __name__ == '__main__':
     for m in all_results:
         errs = deviation_over_expected(exp, all_results[m])
         if args.charts:
+            plt.figure()
             barchart_dict(errs, title="{} per file result".format(type(m).__name__))
         print "{} per-file squared errors:".format(type(m).__name__)
         # pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
     print "Mean", sum(errs.values()) / len(all_results[m])
     print "Median", sorted(errs.values())[len(all_results[m]) / 2]
+    plt.show()
