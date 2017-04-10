@@ -50,7 +50,7 @@ class BFORBMatcher(ImageMatcher):
                 self.kp[unmatchable] = self.filter_indices(self.kp[unmatchable], bad_unmatchable_features)
         print "Removed " + str(count) + " features"
 
-    def match_test_image(self, q_path, threshold = -1):
+    def match_test_image(self, q_path, threshold=-1):
         t_img = cv2.imread(q_path, 0)
         t_k, t_d = orb.detectAndCompute(t_img, None)
         results = []
@@ -59,10 +59,17 @@ class BFORBMatcher(ImageMatcher):
             if (threshold < 0):
                 results.append((i, sum(sorted([y.distance for y in match])[:abs(threshold)])))
             else:
-                results.append((i, len([1 for y in match if y.distance < threshold])))
+                results.append((i, sum([128 - y.distance for y in match if y.distance < threshold])))
         const = -threshold / abs(threshold)
         return sorted(results, key=lambda x: const * x[1])[:10]
 
-    def debug_display(self, q_path, matches):
-        pass
+    def debug_display(self, q_path, matches, threshold):
+        # Draw matches between q_path and the top matched image.
+        img1 = cv2.imread(q_path)
+        m_path = matches[0][0]
+        img2 = cv2.imread(m_path)
+        q_kp, q_descriptors = orb.detectAndCompute(img1, None)
+        matches = bf.match(self.des[m_path], q_descriptors)
+        cv2.drawMatches(img1, q_kp, img2, self.kp[m_path],
+                        [y for y in matches if y.distance < threshold], flags=2)
 

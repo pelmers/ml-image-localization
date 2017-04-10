@@ -122,7 +122,7 @@ if __name__ == '__main__':
                 if args.debug:
                     print "{} best matches {} with score {}".format(q_path, top[0], top[1])
                     print "{} expected match to {}".format(q_path, exp[q_path])
-                    m.debug_display(q_path, matches)
+                    m.debug_display(q_path, matches, threshold)
                     if args.charts:
                         loc_dict = { loc_from_filename(t[0]): t[1] for t in matches }
                         loc_dict = { "{}, {}:{}".format(*k): v for k,v in loc_dict.iteritems() }
@@ -148,7 +148,7 @@ if __name__ == '__main__':
             plt.figure()
             barchart_dict(errs, title="{} per file result".format(type(m).__name__))
         print "{} per-file squared errors:".format(type(m).__name__)
-        # pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
+        pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
     print "Mean", sum(errs.values()) / len(all_results[m])
     print "Median", sorted(errs.values())[len(all_results[m]) / 2]
     plt.show()
