@@ -1,16 +1,20 @@
 import cv2
 import numpy as np
 from matcher import ImageMatcher, test_loose_visibility_constraint
+import matplotlib.pyplot as plt
 
 orb = cv2.ORB_create()
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+
+def filter_indices(original, to_remove):
+    return np.array([original[i] for i in range(len(original)) if i not in to_remove])
 
 class BFORBMatcher(ImageMatcher):
 
     def __init__(self):
         self.kp = {}    # (file_name)-> array of keypoints {location}
         self.des = {}   # file_name) -> array of descriptors {numeric vectors}
-        self.threshold = 30
+        self.threshold = 60
 
     def train(self, train_paths):
         for img_path in train_paths:
@@ -19,10 +23,24 @@ class BFORBMatcher(ImageMatcher):
             k, d = orb.detectAndCompute(img, None)
             self.kp[img_path] = k
             self.des[img_path] = d
-        self.clean_images()
+        # self.clean_images()
+        self.remove_self_matches()
 
-    def filter_indices(self, original, to_remove):
-        return np.array([original[i] for i in range(len(original)) if i not in to_remove])
+    def remove_self_matches(self):
+        count = 0
+        for img_name in self.kp.iterkeys():
+            baddies = set()
+            for (i, des1) in enumerate(self.des[img_name]):
+                for (j, des2) in enumerate(self.des[img_name]):
+                    if i == j:
+                        continue
+                    if cv2.norm(des1, des2, cv2.NORM_HAMMING) < self.threshold:
+                        # it's bad... so put the index in our baddies
+                        baddies.add(i)
+            count += len(baddies)
+            self.des[img_name] = filter_indices(self.des[img_name], baddies)
+            self.kp[img_name] = filter_indices(self.kp[img_name], baddies)
+        print "Removed {} self-matching features".format(count)
 
     # Returns Map[image_path] -> List[image_path] of non-matchable images
     def spatial_constraint_map(self):
@@ -44,10 +62,10 @@ class BFORBMatcher(ImageMatcher):
                         bad_name_features.append(y.queryIdx)
                         bad_unmatchable_features.append(y.trainIdx)
                         count += 1
-                self.des[name] = self.filter_indices(self.des[name], bad_name_features)
-                self.kp[name] = self.filter_indices(self.kp[name], bad_name_features)
-                self.des[unmatchable] = self.filter_indices(self.des[unmatchable], bad_unmatchable_features)
-                self.kp[unmatchable] = self.filter_indices(self.kp[unmatchable], bad_unmatchable_features)
+                self.des[name] = filter_indices(self.des[name], bad_name_features)
+                self.kp[name] = filter_indices(self.kp[name], bad_name_features)
+                self.des[unmatchable] = filter_indices(self.des[unmatchable], bad_unmatchable_features)
+                self.kp[unmatchable] = filter_indices(self.kp[unmatchable], bad_unmatchable_features)
         print "Removed " + str(count) + " features"
 
     def match_test_image(self, q_path, threshold=-1):
@@ -70,6 +88,8 @@ class BFORBMatcher(ImageMatcher):
         img2 = cv2.imread(m_path)
         q_kp, q_descriptors = orb.detectAndCompute(img1, None)
         matches = bf.match(self.des[m_path], q_descriptors)
-        cv2.drawMatches(img1, q_kp, img2, self.kp[m_path],
-                        [y for y in matches if y.distance < threshold], flags=2)
+        img3 = cv2.drawMatches(img2, self.kp[m_path], img1, q_kp,
+                              [y for y in matches if y.distance < threshold], None)
+        plt.imshow(img3)
+        plt.show()
 

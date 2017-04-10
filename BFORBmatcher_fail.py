@@ -1,7 +1,7 @@
 import cv2
 from matcher import ImageMatcher
 
-orb = cv2.ORB()
+orb = cv2.ORB_create()
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
 class BFORBMatcher_fail(ImageMatcher):
@@ -31,10 +31,4 @@ class BFORBMatcher_fail(ImageMatcher):
 
     def debug_display(self, q_path, matches, threshold):
         # Draw matches between q_path and the top matched image.
-        img1 = cv2.imread(q_path)
-        m_path = matches[0][0]
-        img2 = cv2.imread(m_path)
-        q_kp, q_descriptors = orb.detectAndCompute(img1, None)
-        matches = bf.match(self.des[m_path], q_descriptors)
-        cv2.drawMatches(img1, q_kp, img2, self.kp[m_path],
-                        matches[:10], flags=2)
+        return
