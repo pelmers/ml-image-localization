@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from BFORBmatcher import BFORBMatcher
+from matcher import loc_from_filename
 
 parser = ArgumentParser(description='Run some models.')
 parser.add_argument('--query', help='path to query image, default will benchmark on all sortedtesting images', default=None)
@@ -17,6 +18,10 @@ parser.add_argument('--matchers', help='select matchers to use, comma-separated 
 parser.add_argument('--detail', action='store_true', help='output additional detailed scoring breakdowns')
 parser.add_argument('--debug', action='store_true', help='have matcher output debug info after each match')
 parser.add_argument('--charts', action='store_true', help='should I show bar charts')
+parser.add_argument('--threshold')
+parser.add_argument('--thresholdInterval')
+parser.add_argument('--numThresholds')
+
 
 all_matchers = [BFORBMatcher]
 
@@ -27,16 +32,6 @@ def timer(message):
     yield
     end = time()
     print message % (end - start)
-
-
-def loc_from_filename(path):
-    """Return x,y,o from filename.
-    """
-    f = basename(path)
-    root, _ = splitext(f)
-    x, y, o = root.split('_')
-    return float(x), float(y), o
-
 
 def expected_results(test_paths, train_paths):
     # The expected answer is the closest point with same orientation.
@@ -58,7 +53,7 @@ def deviation_over_expected(expect, actual):
         q_x, q_y, _ = loc_from_filename(q)
         e_x, e_y, _ = loc_from_filename(expect[q])
         a_x, a_y, _ = loc_from_filename(actual[q])
-        err[q] = (q_x - a_x)**2 + (q_y - a_y)**2 - (q_x - e_x)**2 - (q_y - e_y)**2
+        err[q] = ((q_x - a_x)**2 + (q_y - a_y)**2) ** 0.5 - ((q_x - e_x)**2 + (q_y - e_y)**2) ** 0.5
     return err
 
 
@@ -115,22 +110,20 @@ if __name__ == '__main__':
     queries = [args.query] if args.query else glob("sortedtesting/*.JPG")
     all_results = {}
     exp = expected_results(queries, train_paths)
+    threshold = int(args.threshold)
     for m in trained_matchers:
         all_results[m] = {}
         with timer("{} queries with {} took %.3f seconds.".format(len(queries), type(m).__name__)):
             for q_path in queries:
                 # matches is list of tuples (path, score)
-                matches = m.match_test_image(q_path)
+                matches = m.match_test_image(q_path, threshold)
                 top = matches[0] if len(matches) else None
                 all_results[m][q_path] = top[0]
                 if args.detail:
                     print q_path, matches
-                elif top:
-                    print "{} best matches {} with score {}".format(q_path, top[0], top[1])
-                else:
-                    print "{} no match found :(".format(q_path)
-                print "{} expected match to {}".format(q_path, exp[q_path])
                 if args.debug:
+                    print "{} best matches {} with score {}".format(q_path, top[0], top[1])
+                    print "{} expected match to {}".format(q_path, exp[q_path])
                     m.debug_display(q_path, matches)
                     if args.charts:
                         loc_dict = { loc_from_filename(t[0]): t[1] for t in matches }
@@ -146,10 +139,15 @@ if __name__ == '__main__':
         barchart_class_dict(mses, "Mean squared error")
     print "Accuracy", accuracy
     print "Mean squared error", mses
+    # dist = mses[m]
+    # print dist
+    # print "Mean", sum(dist) / len(all_results[m])
+    # print "Median", sorted(dist)[len(all_results[m]) / 2]
     for m in all_results:
         errs = deviation_over_expected(exp, all_results[m])
         if args.charts:
             barchart_dict(errs, title="{} per file result".format(type(m).__name__))
         print "{} per-file squared errors:".format(type(m).__name__)
-        pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
-
+        # pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
+    print "Mean", sum(errs.values()) / len(all_results[m])
+    print "Median", sorted(errs.values())[len(all_results[m]) / 2]

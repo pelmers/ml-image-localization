@@ -5,7 +5,6 @@ import sys
 import os
 from glob import glob
 from os.path import basename, splitext
-from pprint import pprint
 
 # Initiate SIFT detector
 orb = cv2.ORB()
@@ -22,8 +21,8 @@ def match_test_image(t_path, names, des):
     results = []
     for i, d in zip(names, des):
         match = bf.match(d, t_d)
-        results.append((i, sum(sorted([y.distance for y in match])[:10])))
-    return sorted(results, key=lambda x: x[1])[:10]
+	results.append(i, len([1 for y in match if y.distance < 30.0]))
+    return sorted(results, key=lambda x: -x[1])[:10]
 
 def loc_from_filename(path):
     """Return x,y,o from filename.
@@ -59,8 +58,8 @@ if __name__ == '__main__':
         m_x, m_y, m_o = loc_from_filename(top10[0][0])
         dist = ((t_x - m_x)**2 + (t_y - m_y)**2)**0.5
         if dist > 9:
-            print t_path, " matched too far from ", top10[0][0]
-            pprint(top10)
+            # print t_path, " matched too far from ", top10[0][0]
+            # pprint(top10)
         else:
             success += 1
         if len(t_paths) == 1:
