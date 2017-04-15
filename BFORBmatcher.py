@@ -23,11 +23,12 @@ class BFORBMatcher(ImageMatcher):
             k, d = orb.detectAndCompute(img, None)
             self.kp[img_path] = k
             self.des[img_path] = d
-        # self.clean_images()
-        self.remove_self_matches()
+        self.clean_images()
+        # self.remove_self_matches()
 
     def remove_self_matches(self):
         count = 0
+        # TODO: Make it faster with numpy, hamming distance(a, b) = sum(xor(a, b))
         for img_name in self.kp.iterkeys():
             baddies = set()
             for (i, des1) in enumerate(self.des[img_name]):

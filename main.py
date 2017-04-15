@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 from BFORBmatcher import BFORBMatcher
 from BFORBmatcher_fail import BFORBMatcher_fail
+from TFMatcher import TFMatcher
 from matcher import loc_from_filename
 
 parser = ArgumentParser(description='Run some models.')
@@ -22,7 +23,7 @@ parser.add_argument('--charts', action='store_true', help='should I show bar cha
 parser.add_argument('--threshold', default=-1)
 
 
-all_matchers = [BFORBMatcher, BFORBMatcher_fail]
+all_matchers = [BFORBMatcher_fail, TFMatcher]
 
 
 @contextmanager
@@ -32,14 +33,25 @@ def timer(message):
     end = time()
     print message % (end - start)
 
-def expected_results(test_paths, train_paths):
-    # The expected answer is the closest point with same orientation.
+def expected_results(test_paths, train_paths, threshold=2):
+    """Return map of {test_path: [equally closest train paths]}
+    """
+    # The expected answer is the closest points with same orientation within
+    # threshold radius of the minimum.
+    # Squared difference between locs q, p
+    dist = lambda q, p: (q[0] - p[0])**2 + (q[1] - p[1])**2
     exp = {}
     train_locs = zip(train_paths, map(loc_from_filename, train_paths))
-    for q in test_paths:
-        q_x, q_y, q_o = loc_from_filename(q)
-        exp[q] = min([(p, p_x, p_y) for (p, (p_x, p_y, p_o)) in train_locs if p_o == q_o],
-                     key=lambda (_, p_x, p_y): (q_x - p_x)**2 + (q_y - p_y)**2)[0]
+    for q_path in test_paths:
+        q_loc = loc_from_filename(q_path)
+        exp[q_path] = set([])
+        train_distances = {}
+        for t_path, t_loc in train_locs:
+            train_distances[t_path] = dist(t_loc, q_loc)
+        min_dist = min(train_distances.values())
+        for t_path, distance in train_distances.iteritems():
+            if distance < min_dist + threshold:
+                exp[q_path].add(t_path)
     return exp
 
 
@@ -48,11 +60,12 @@ def deviation_over_expected(expect, actual):
     the test set, per image.
     """
     err = {}
-    for q in expect:
-        q_x, q_y, _ = loc_from_filename(q)
-        e_x, e_y, _ = loc_from_filename(expect[q])
+    for q, q_set in expect.iteritems():
         a_x, a_y, _ = loc_from_filename(actual[q])
-        err[q] = ((q_x - a_x)**2 + (q_y - a_y)**2) ** 0.5 - ((q_x - e_x)**2 + (q_y - e_y)**2) ** 0.5
+        err[q] = float('inf')
+        for e_path in q_set:
+            e_x, e_y, _ = loc_from_filename(e_path)
+            err[q] = min(err[q], ((a_x - e_x)**2 + (a_y - e_y)**2)**0.5)
     return err
 
 
@@ -121,7 +134,7 @@ if __name__ == '__main__':
                     print q_path, matches
                 if args.debug:
                     print "{} best matches {} with score {}".format(q_path, top[0], top[1])
-                    print "{} expected match to {}".format(q_path, exp[q_path])
+                    print "{} expected match to any of {}".format(q_path, exp[q_path])
                     m.debug_display(q_path, matches, threshold)
                     if args.charts:
                         loc_dict = { loc_from_filename(t[0]): t[1] for t in matches }
@@ -129,7 +142,7 @@ if __name__ == '__main__':
                         barchart_dict(loc_dict, title="Ranking matches to {}".format(q_path), to_sort=True, key_labels=True)
 
     # Now grade the results and show plots.
-    accuracy = {m: sum(1.0/len(exp) for q in exp if exp[q] == all_results[m][q])
+    accuracy = {m: sum(1.0/len(exp) for q in exp if all_results[m][q] in exp[q])
                 for m in all_results}
     mses = {m: mse(exp, all_results[m]) for m in all_results}
     if args.charts:
@@ -137,7 +150,6 @@ if __name__ == '__main__':
         plt.figure()
         barchart_class_dict(mses, "Mean squared error")
     print "Accuracy", accuracy
-    print "Mean squared error", mses
     # dist = mses[m]
     # print dist
     # print "Mean", sum(dist) / len(all_results[m])
@@ -149,6 +161,7 @@ if __name__ == '__main__':
             barchart_dict(errs, title="{} per file result".format(type(m).__name__))
         print "{} per-file squared errors:".format(type(m).__name__)
         pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
-    print "Mean", sum(errs.values()) / len(all_results[m])
-    print "Median", sorted(errs.values())[len(all_results[m]) / 2]
+    print "Mean squared error", mses
+    for m in all_results:
+        print m, "Median", sorted(errs.values())[len(all_results[m]) / 2]
     plt.show()
