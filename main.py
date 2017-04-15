@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from contextlib import contextmanager
 from glob import glob
+import os
 from os.path import basename, join, splitext
 from pprint import pprint
 from time import time
@@ -23,7 +24,7 @@ parser.add_argument('--charts', action='store_true', help='should I show bar cha
 parser.add_argument('--threshold', default=-1)
 
 
-all_matchers = [BFORBMatcher_fail, TFMatcher]
+all_matchers = [TFMatcher]
 
 
 @contextmanager
@@ -102,29 +103,28 @@ def barchart_class_dict(d, title=""):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    # 1. Train model (s)
-    # 2a. Bench? Then try every test image.
-    # 2b. Otherwise use provided image to test
-    matchers_selected = args.matchers.split(',')
-    use_matchers = [m for m in all_matchers
-                    if type(m).__name__.lower().rstrip('matcher') in matchers_selected]
-    if not len(use_matchers):
-        use_matchers = all_matchers[:]
+    def the_thing():
+        # 1. Train model (s)
+        # 2a. Bench? Then try every test image.
+        # 2b. Otherwise use provided image to test
+        matchers_selected = args.matchers.split(',')
+        use_matchers = [m for m in all_matchers
+                        if type(m).__name__.lower().rstrip('matcher') in matchers_selected]
+        if not len(use_matchers):
+            use_matchers = all_matchers[:]
 
-    trained_matchers = []
-    train_paths = glob(join(args.train_folder, "*.JPG")) + glob(join(args.train_folder, "*.jpg"))
-    for Matcher in use_matchers:
-        m = Matcher()
-        with timer("Training {} took %.3f seconds.".format(type(m).__name__)):
+        trained_matchers = []
+        train_paths = glob(join(args.train_folder, "*.JPG")) + glob(join(args.train_folder, "*.jpg"))
+        for Matcher in use_matchers:
+            m = Matcher()
             m.train(train_paths)
-        trained_matchers.append(m)
-    queries = [args.query] if args.query else glob("sortedtesting/*.JPG")
-    all_results = {}
-    exp = expected_results(queries, train_paths)
-    threshold = int(args.threshold)
-    for m in trained_matchers:
-        all_results[m] = {}
-        with timer("{} queries with {} took %.3f seconds.".format(len(queries), type(m).__name__)):
+            trained_matchers.append(m)
+        queries = [args.query] if args.query else glob("sortedtesting/*.JPG")
+        all_results = {}
+        exp = expected_results(queries, train_paths)
+        threshold = int(args.threshold)
+        for m in trained_matchers:
+            all_results[m] = {}
             for q_path in queries:
                 # matches is list of tuples (path, score)
                 matches = m.match_test_image(q_path, threshold)
@@ -141,27 +141,40 @@ if __name__ == '__main__':
                         loc_dict = { "{}, {}:{}".format(*k): v for k,v in loc_dict.iteritems() }
                         barchart_dict(loc_dict, title="Ranking matches to {}".format(q_path), to_sort=True, key_labels=True)
 
-    # Now grade the results and show plots.
-    accuracy = {m: sum(1.0/len(exp) for q in exp if all_results[m][q] in exp[q])
-                for m in all_results}
-    mses = {m: mse(exp, all_results[m]) for m in all_results}
-    if args.charts:
-        barchart_class_dict(accuracy, "Accuracy")
-        plt.figure()
-        barchart_class_dict(mses, "Mean squared error")
-    print "Accuracy", accuracy
-    # dist = mses[m]
-    # print dist
-    # print "Mean", sum(dist) / len(all_results[m])
-    # print "Median", sorted(dist)[len(all_results[m]) / 2]
-    for m in all_results:
-        errs = deviation_over_expected(exp, all_results[m])
+        # Now grade the results and show plots.
+        accuracy = {m: sum(1.0/len(exp) for q in exp if all_results[m][q] in exp[q])
+                    for m in all_results}
+        mses = {m: mse(exp, all_results[m]) for m in all_results}
         if args.charts:
+            barchart_class_dict(accuracy, "Accuracy")
             plt.figure()
-            barchart_dict(errs, title="{} per file result".format(type(m).__name__))
-        print "{} per-file squared errors:".format(type(m).__name__)
-        pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
-    print "Mean squared error", mses
-    for m in all_results:
-        print m, "Median", sorted(errs.values())[len(all_results[m]) / 2]
-    plt.show()
+            barchart_class_dict(mses, "Mean squared error")
+        if args.detail:
+            print "Accuracy", accuracy
+            for m in all_results:
+                errs = deviation_over_expected(exp, all_results[m])
+                if args.charts:
+                    plt.figure()
+                    barchart_dict(errs, title="{} per file result".format(type(m).__name__))
+                print "{} per-file squared errors:".format(type(m).__name__)
+                pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
+            print "Mean squared error", mses
+            for m in all_results:
+                print m, "Median", sorted(errs.values())[len(all_results[m]) / 2]
+        if args.charts:
+            plt.show()
+        return mses[m]
+
+    min_mse = float('inf')
+    best_params = None
+    for radius in range(0, 40, 5):
+        for threshold in range(0, 40, 5):
+            os.putenv("RADIUS", str(radius))
+            os.putenv("THRESH", str(threshold))
+            m = the_thing()
+            print radius, threshold, m
+            if m < min_mse:
+                min_mse = mse
+                best_params = (radius, threshold)
+    print "I am the best", min_mse
+    print "I am the best radius and athrrehsold", best_params
