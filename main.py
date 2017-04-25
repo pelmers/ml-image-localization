@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 from BFORBmatcher import BFORBMatcher
 from BFORBmatcher_fail import BFORBMatcher_fail
+from BOWMatcher import BOWMatcher
 from TFMatcher import TFMatcher
 from matcher import loc_from_filename
 
@@ -24,7 +25,7 @@ parser.add_argument('--charts', action='store_true', help='should I show bar cha
 parser.add_argument('--threshold', default=-1)
 
 
-all_matchers = [TFMatcher]
+all_matchers = [BOWMatcher]
 
 
 @contextmanager
@@ -149,28 +150,29 @@ if __name__ == '__main__':
             barchart_class_dict(accuracy, "Accuracy")
             plt.figure()
             barchart_class_dict(mses, "Mean squared error")
-        if args.detail:
-            print "Accuracy", accuracy
-            for m in all_results:
-                errs = deviation_over_expected(exp, all_results[m])
-                if args.charts:
-                    plt.figure()
-                    barchart_dict(errs, title="{} per file result".format(type(m).__name__))
-                print "{} per-file squared errors:".format(type(m).__name__)
-                pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
-            print "Mean squared error", mses
-            for m in all_results:
-                print m, "Median", sorted(errs.values())[len(all_results[m]) / 2]
+        print "Accuracy", accuracy
+        for m in all_results:
+            errs = deviation_over_expected(exp, all_results[m])
+            if args.charts:
+                plt.figure()
+                barchart_dict(errs, title="{} per file result".format(type(m).__name__))
+            # print "{} per-file squared errors:".format(type(m).__name__)
+            # pprint(sorted(errs.items(), key=lambda i: errs[i[0]]))
+        print "Mean squared error", mses
+        for m in all_results:
+            print m, "Median", sorted(errs.values())[len(all_results[m]) / 2]
         if args.charts:
             plt.show()
         return mses[m]
 
+    m = the_thing()
+    """
     min_mse = float('inf')
     best_params = None
-    for radius in range(0, 40, 5):
-        for threshold in range(0, 40, 5):
-            os.putenv("RADIUS", str(radius))
-            os.putenv("THRESH", str(threshold))
+    for radius in range(30, 60, 5):
+        for threshold in range(33, 38, 1):
+            os.environ["RADIUS"] = str(radius)
+            os.environ["THRESH"] = str(threshold)
             m = the_thing()
             print radius, threshold, m
             if m < min_mse:
@@ -178,3 +180,4 @@ if __name__ == '__main__':
                 best_params = (radius, threshold)
     print "I am the best", min_mse
     print "I am the best radius and athrrehsold", best_params
+    """
