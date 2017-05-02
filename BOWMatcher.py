@@ -30,21 +30,19 @@ class BOWMatcher(ImageMatcher):
             self.BOW.add(d)
             count += 1
             print count
+            # Randomly sample the first 50 images to train the BoW features
             if count > 50:
                 break
         print "Training BOW"
         dictionary = self.BOW.cluster()
         print "Finished training BOW"
         self.bowDiction.setVocabulary(dictionary)
-        count = 0
         for img_path in train_paths:
             img = cv2.imread(img_path, 0)
             d = self.bowDiction.compute(img, surf.detect(img))
             self.des = np.append(self.des, d, axis=0)
             self.idf += d
             count += 1
-            print count
-        # print "OOGA BOOGA", self.idf
 
     def match_test_image(self, q_path, _):
         t_img = cv2.imread(q_path, 0)

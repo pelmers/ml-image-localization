@@ -1,17 +1,17 @@
 import cv2
 import numpy as np
+import math
 from matcher import ImageMatcher
 from collections import defaultdict
 
 orb = cv2.ORB_create()
 bf = cv2.BFMatcher(cv2.NORM_HAMMING)
-radius = 10
-match_threshold = 30
+radius = 45
+match_threshold = 33
 
+class IDFMatcher(ImageMatcher):
 
-class TFMatcher(ImageMatcher):
-
-    def __init__(self):
+    def __init__(self):	
         self.kp = {}
         self.des = {}
         # TODO: search by radius or seomthing
@@ -32,6 +32,17 @@ class TFMatcher(ImageMatcher):
             self.kp[img_path] = k
             self.des[img_path] = d
 
+        # Now go through all features and compute its frequency
+        
+        c = 0
+        for image, d in self.des.iteritems():
+            c += 1
+            matches = bf.knnMatch(d, self.all_features, k=500)
+            for (idx, match) in enumerate(matches):
+                for y in match:
+                    if y.distance < radius:
+                        self.feature_frequency[(image, idx)] += 1
+
     def match_test_image(self, q_path, _):
         t_img = cv2.imread(q_path, 0)
         t_k, t_d = orb.detectAndCompute(t_img, None)
@@ -42,8 +53,9 @@ class TFMatcher(ImageMatcher):
             weighted_matches = []
             for y in match:
                 if y.distance < match_threshold:
-                    weighted_matches.append(1)
-            results.append((i, sum(weighted_matches)))
+                    freq = self.feature_frequency[(i, y.trainIdx)]
+                    weighted_matches.append(math.log(len(self.all_features) / freq))
+		results.append((i, sum(weighted_matches)))
         return sorted(results, key=lambda x: -x[1])[:10]
 
 

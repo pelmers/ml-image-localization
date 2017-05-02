@@ -1,18 +1,17 @@
 from argparse import ArgumentParser
 from contextlib import contextmanager
 from glob import glob
-import os
 from os.path import basename, join, splitext
-from pprint import pprint
 from time import time
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-from BFORBmatcher import BFORBMatcher
-from BFORBmatcher_fail import BFORBMatcher_fail
+from SelfCleaningMatcher import SelfCleaningMatcher
+from TopKMatcher import TopKMatcher
 from BOWMatcher import BOWMatcher
-from TFMatcher import TFMatcher
+from IDFMatcher import IDFMatcher
+from CountMatcher import CountMatcher
 from matcher import loc_from_filename
 
 parser = ArgumentParser(description='Run some models.')
@@ -25,7 +24,7 @@ parser.add_argument('--charts', action='store_true', help='should I show bar cha
 parser.add_argument('--threshold', default=-1)
 
 
-all_matchers = [BOWMatcher]
+all_matchers = [IDFMatcher, SelfCleaningMatcher, CountMatcher] # IDF, self-cleaning, original matcher respectively
 
 
 @contextmanager
@@ -78,7 +77,7 @@ def mse(expect, actual):
     return float(sum(deviation_over_expected(expect, actual).values())) / len(expect)
 
 
-def barchart_dict(d, title="", to_sort=False, key_labels=False):
+def barchart_dict(d, title="", to_sort=False, key_labels=False, ylabel=""):
     """Show a bar chart using given dictionary key, values as x-y axis. If
     to_sort, then sort keys by ascending value. If key_labels, then label the
     x-axis using key strings.
@@ -92,19 +91,20 @@ def barchart_dict(d, title="", to_sort=False, key_labels=False):
     if key_labels:
         plt.xticks(x_pos, x)
     plt.title(title)
+    plt.ylabel(ylabel)
 
 
-def barchart_class_dict(d, title=""):
+def barchart_class_dict(d, title="", ylabel = ""):
     """Show a bar chart using given dictionary as keys as above but display key
     labels with their type name instead.
     """
     barchart_dict({type(k).__name__: v for k, v in d.iteritems()}, title,
-            key_labels=True)
+            key_labels=True, ylabel=ylabel)
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    def the_thing():
+    def experiment():
         # 1. Train model (s)
         # 2a. Bench? Then try every test image.
         # 2b. Otherwise use provided image to test
@@ -147,9 +147,9 @@ if __name__ == '__main__':
                     for m in all_results}
         mses = {m: mse(exp, all_results[m]) for m in all_results}
         if args.charts:
-            barchart_class_dict(accuracy, "Accuracy")
+            barchart_class_dict(accuracy, "Accuracy", ylabel="percent perfect match")
             plt.figure()
-            barchart_class_dict(mses, "Mean squared error")
+            barchart_class_dict(mses, "Mean error", ylabel="distance (feet)")
         print "Accuracy", accuracy
         for m in all_results:
             errs = deviation_over_expected(exp, all_results[m])
@@ -165,19 +165,5 @@ if __name__ == '__main__':
             plt.show()
         return mses[m]
 
-    m = the_thing()
-    """
-    min_mse = float('inf')
-    best_params = None
-    for radius in range(30, 60, 5):
-        for threshold in range(33, 38, 1):
-            os.environ["RADIUS"] = str(radius)
-            os.environ["THRESH"] = str(threshold)
-            m = the_thing()
-            print radius, threshold, m
-            if m < min_mse:
-                min_mse = mse
-                best_params = (radius, threshold)
-    print "I am the best", min_mse
-    print "I am the best radius and athrrehsold", best_params
-    """
+    # Run the script
+    m = experiment()

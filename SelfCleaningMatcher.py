@@ -5,16 +5,17 @@ import matplotlib.pyplot as plt
 
 orb = cv2.ORB_create()
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+match_threshold = 35
 
 def filter_indices(original, to_remove):
     return np.array([original[i] for i in range(len(original)) if i not in to_remove])
 
-class BFORBMatcher(ImageMatcher):
+class SelfCleaningMatcher(ImageMatcher):
 
     def __init__(self):
         self.kp = {}    # (file_name)-> array of keypoints {location}
         self.des = {}   # file_name) -> array of descriptors {numeric vectors}
-        self.threshold = 60
+        self.threshold = 35
 
     def train(self, train_paths):
         for img_path in train_paths:
@@ -23,8 +24,8 @@ class BFORBMatcher(ImageMatcher):
             k, d = orb.detectAndCompute(img, None)
             self.kp[img_path] = k
             self.des[img_path] = d
-        self.clean_images()
-        # self.remove_self_matches()
+        # self.clean_images()
+        self.remove_self_matches()
 
     def remove_self_matches(self):
         count = 0
@@ -69,18 +70,19 @@ class BFORBMatcher(ImageMatcher):
                 self.kp[unmatchable] = filter_indices(self.kp[unmatchable], bad_unmatchable_features)
         print "Removed " + str(count) + " features"
 
-    def match_test_image(self, q_path, threshold=-1):
+    def match_test_image(self, q_path, _):
         t_img = cv2.imread(q_path, 0)
         t_k, t_d = orb.detectAndCompute(t_img, None)
         results = []
         for i, d in self.des.iteritems():
-            match = bf.match(d, t_d)
-            if (threshold < 0):
-                results.append((i, sum(sorted([y.distance for y in match])[:abs(threshold)])))
-            else:
-                results.append((i, sum([128 - y.distance for y in match if y.distance < threshold])))
-        const = -threshold / abs(threshold)
-        return sorted(results, key=lambda x: const * x[1])[:10]
+            match = bf.match(t_d, d)
+            # TODO: will we divide by 0??
+            weighted_matches = []
+            for y in match:
+                if y.distance < match_threshold:
+                    weighted_matches.append(1)
+            results.append((i, sum(weighted_matches)))
+        return sorted(results, key=lambda x: -x[1])[:10]
 
     def debug_display(self, q_path, matches, threshold):
         # Draw matches between q_path and the top matched image.
